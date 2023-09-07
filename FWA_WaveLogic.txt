@@ -1,0 +1,341 @@
+
+
+
+'---========================================================================================================
+'--- NEW WAVE LOGIC ----
+'---========================================================================================================
+Sub NewWaveLogic                                                          
+    Shared CURRENTREC, CURRENTPX!, PREVIOUSPX!, W$(), CD                  
+    Shared CURRENTDT$, PLT!(), RLT(), PLL!(), RLL()                       
+    Shared SP, STACKREC(), MSSG$, ANSWER$, DEBUG$, MaxLevel               
+    Shared WMark$, WMarkRec, PCLOSE$, WAVE$(), PATTERN$(), ZigRec, ZagRec 
+    Shared TradePosition$                                                 
+
+    DEBUG = 0                                                             
+    ' -------------------------------------------
+    ' Set Level 0 direction                      
+    ' -------------------------------------------
+    PD = CD                                                             ' Set Previous Direction to current direction 
+    CD = Sgn(CURRENTPX! - PREVIOUSPX!)                                  ' New (Current) Dir. up="+" Down = "-"  No Change = "0"
+    If CD = 0 Then CD = PD                                              ' Unchanged is same as previous direction     
+    ' -------------------------------------------
+    ' Check for Level 0 turn and mark            
+    ' -------------------------------------------
+    If CD = -PD Then                                                    ' -- There is a CHANGE in direction           
+        If CD = 1 Then                                                  ' -- NEW direction is UP                      
+            W$(0) = "Up"                                                '    Level 0 direction is up                  
+            Call CheckPreviousMark(0, CURRENTREC, "H", CURRENTPX!)      '    Test current rec is LH, HH, HL, LL at 0  
+        Else                                                            '    NEW direction is DOWN                    
+            W$(0) = "Dn"                                                '    Level 0 direction is down                
+            Call CheckPreviousMark(0, CURRENTREC, "L", CURRENTPX!)      '    Test current rec is LH, HH, HL, LL at 0  
+        End If '                                                                                                      
+        Call MarkWave(CURRENTREC, 0, WMark$)                            '    Mark current rec at Level-0              
+    ElseIf CD = PD Then                                                 '    No change in Level 0 direction           
+        Get #2, CURRENTREC - 1                                          '    Continuation, determine wave mark        
+        WMark$ = WAVE$(0)                                               '    Previous wave mark on previous record    
+        Call MarkWave(CURRENTREC - 1, 0, " . ")                         '    Unmark previous record                   
+        Call CheckPreviousMark(0, CURRENTREC, Right$(WMark$,1), CURRENTPX!) '  New penetration to become LL or HH ?   
+        Call MarkWave(CURRENTREC, 0, WMark$)                            '    Mark current record at level zero        
+    End If                                                                                                            
+    MaxLevel = 0                                                        ' Highest Level marked today is zero to start 
+    ' ------------------------------------------------------------------
+    ' At each degree check for a zig-zag penetration that promotes a    
+    ' recent pullup or pullback to the next level.  For instance a LH   
+    ' and then a LL at level zero is a ZEE DOWN that would raise the    
+	' most recent level zero zig-zag HH to level 1.                     
+    ' Note Shadowing logic:  The most recent zig-zag HH may not be the  
+    ' highest zig-zag HH since the previous ZEE DOWN, a requirement.    
+	' ------------------------------------------------------------------
+    
+	' ------------------------------------------------------------------
+    ' Starting at level zero:                                           
+	' ------------------------------------------------------------------
+    CheckHigher% = TRUE%                                                                                        
+    Call GetPattern(0)                                                  ' Set level zero pattern                
+	If Pattern$(0) = "HL-HH" then                                       ' Is pattern a zig-zag up?              
+       Call Promote(ZagRec, "L", 0)          'Promote lowest LL-zero (since most recent H-one) to HL-1 or LL-1  
+	ElseIf Pattern$(0)= "LH-LL"  then                                   ' Is pattern a zig-zag dn?              
+       Call Promote(ZagRec, "H", 0)          'Promote highest HH-zero (since most recent L-one) to HH-1 or LH-1 
+    Else                                                                                                        
+       CheckHigher% = FALSE%                 'No Level-0 zig-zag so nothing to check at higher levels           
+    End If                                                                                                      
+    If CheckHigher% then                                                                                        
+    ' ------------------------------------------------------------------
+    ' Level 1                                                           
+    ' ------------------------------------------------------------------
+     Call GetPattern(1)                                                   ' Level 1 pattern                     
+     If Right$(Pattern$(1),1)="H" then W$(1)="Dn" ELSE W$(1)="Up"                                               
+     If Pattern$(1) = "HL-HH" then                                        ' Is pattern a zig-zag up?            
+       Call Promote(ZagRec, "L", 1)          'Promote lowest LL-1 (since most recent H-two) to HL-2 or LL-2     
+       If TradePosition$ = "OutS " then TradePosition$="Out  "          
+	 ElseIf Pattern$(1)= "LH-LL"  then                                   ' Is pattern a zig-zag dn?             
+       Call Promote(ZagRec, "H", 1)          'Promote highest HH-zero (since most recent L-two) to HH-2 or LH-2 
+       If TradePosition$ = "OutL " then TradePosition$="Out  "          
+     Else                                                                                                       
+       CheckHigher% = FALSE%                 'nothing to check at higher levels                                 
+     End If                                                                                                     
+     If CheckHigher% then                                                                                       
+    ' ------------------------------------------------------------------
+    ' Level 2                                                           
+    ' ------------------------------------------------------------------
+       Call GetPattern(2)                                                   ' Level 2 pattern                   
+       If Right$(Pattern$(2),1)="H" then W$(2)="Dn" ELSE W$(2)="Up"                                             
+       If Pattern$(2) = "HL-HH" then                                        ' Is pattern a zig-zag up?          
+          Call Promote(ZagRec, "L", 2)          'Promote lowest LL-2 (since most recent H-3) to HL-3 or LL-3    
+	   ElseIf Pattern$(2)= "LH-LL"  then                                   ' Is pattern a zig-zag dn?           
+          Call Promote(ZagRec, "H", 2)          'Promote highest HH-2 (since most recent L-3) to HH-3 or LH-3   
+       Else                                                                                                     
+       CheckHigher% = FALSE%                 'nothing to check at higher levels                                 
+       End If                                                                                                   
+       If CheckHigher% then                                                                                     
+    ' ------------------------------------------------------------------
+    ' Level 3                                                           
+    ' ------------------------------------------------------------------
+          Call GetPattern(3)                                               ' Level 3 pattern                    
+          If Right$(Pattern$(3),1)="H" then W$(3)="Dn" ELSE W$(3)="Up"                                          
+          If Pattern$(3) = "HL-HH" then                                        ' Is pattern a zig-zag up?       
+             Call Promote(ZagRec, "L", 3)        'Promote lowest LL-3 (since most recent H-4) to HL-4 or LL-4   
+	      ElseIf Pattern$(3)= "LH-LL"  then                                   ' Is pattern a zig-zag dn?        
+             Call Promote(ZagRec, "H", 3)        'Promote highest HH-3 (since most recent L-4) to HH-4 or LH-4  
+          Else                                                                                                  
+             CheckHigher% = FALSE%               'Nothing done at Level-5 and above                             
+          End If                                                                                                
+       End If      ' Level 3                                                                                    
+	 End If        ' Level 2                                                                                    
+	End If         ' Level 1                                                                                    
+    '                                                                                                           
+ ' Update highest high and lowest low for all except highest Level                                              
+ '  12/21/21:  I don't think this makes sense.  Why should the current price be the PLL(4) for example?         
+' For DG = 0 To MAXDGRE% - 1                                                                                     
+'        If CURRENTPX! >= PHH!(DG) Then                                                                          
+'            RHH(DG) = CURRENTREC: PHH!(DG) = CURRENTPX!                             ' Highest HH                
+'        ElseIf CURRENTPX! <= PLL!(DG) Then                                          ' Lowest LL                 
+'            RLL(DG) = CURRENTREC: PLL!(DG) = CURRENTPX!                                                         
+'        End If                                                                                                  
+'    Next DG                                                                                                     
+End Sub                                                                                                         
+
+
+
+Sub GetPattern(CheckLevel)                                                                                      
+    Shared CURRENTREC, WAVE$(), Pattern$(), ZigRec, ZagRec                                                      
+    Shared MSSG$, ANSWER$                                                                            
+    '   ---------------------------------------------------------------------------------------------
+    '   Starting with CurrentRec, set Pattern$(CheckLevel) as "HL-HH", "LH-LL", etc.                 
+    '   We are setting the pattern to determine if a zig-zag has been completed at level CheckLevel. 
+    '   ---------------------------------------------------------------------------------------------
+
+    Pattern$(CheckLevel) = "     "                                                                      
+    For R0 = Currentrec to 1 STEP -1                                                                    
+        Get #2, R0                                                                                      
+        WSave$ = Right$(WAVE$(CheckLevel),2)      ' The rightmost two characters of record WaveMark     
+        If WSave$ <>"  " and WSave$ <> ". " then      ' Found recent mark at CheckLevel                 
+		   ZagRec = R0                                                                                  
+           For RR = (R0 - 1) To 1 Step -1             ' Look back                                       
+               Get #2, RR                                                                              '
+               If Right$(WAVE$(CheckLevel), 1) <> " " Then      ' Most recent prior CheckLevel Mark     
+                  Pattern$(CheckLevel) =  Right$(Wave$(CheckLevel), 2)+"-"+WSave$ '                     
+                  ZigRec = RR                                                                           
+                  Exit Sub                                           '                                  
+               End If                                                                                   
+           Next RR                                                                                      
+           Exit Sub                               ' No mark prior to most recent ==> No pattern         
+        End If                                                                                          
+    Next R0 '  Not done, keep looking                                                                   
+End Sub                                                                                                 
+
+
+
+Sub Promote(EndRec, HighLow$, Level)
+    Shared WAVE$(), PCLOSE$, ZagRec, WMark$, MaxLevel                                                   
+    Shared MSSG$, ANSWER$                                                                               
+    '---------------------------------------------------------------------------------------------------
+    ' Zig Zag found at level [Level] in direction HighLow$ ending at record[EndRec]                     
+    ' If HighLow$ is "L" :                                                                              
+    ' This routine will Promote lowest LL-[Level] since most recent previous [Level+1]                  
+    ' High to HL or LL at level [Level+1]                                                               
+    '---------------------------------------------------------------------------------------------------
+
+    ' The look-back period ends at EndRec.  The look-back period begins at the most recent              
+    ' previous [HighLowopposite] at level [Level + 1}                                                   
+    If HighLow$="H" then                                                                                
+       W$="L"            ' promoting a high; looking for beginning at a Level+1 Low                     
+    else                                                                                                
+       W$="H"            ' promoting a low; looking for the beginning at a Level+1 high                 
+    End If                                                                                              
+    PHigh! = 0                                                                                          
+    PLow! = 9999999                                                                                     
+    RangeStart=1                                                                                        
+    For RR = EndRec-1 to 1 STEP -1                                                                      
+        Get #2, RR                                                                                      
+        If Right$(Wave$(Level+1),1) = W$ then                                                           
+           RangeStart=RR+1                                                                              
+           Exit For                                           '   Found previous HighLow opposite       
+        End If                                                                                          
+        If Right$(Wave$(Level),1) <> " " then '      <===== HighLow$ then  '   Found HighLow$           
+           If Val(PCLOSE$) < PLow! then PLow! = Val(PCLOSE$): RL = RR   ' Track Lowest                  
+           If Val(PCLOSE$) > PHigh! then PHigh! = Val(PCLOSE$): RH = RR ' Track Highest                 
+        End If                                                                                          
+    Next RR                                                   '  Keep looking until opposite or RR=1    
+                                                                                                        
+    IF (HighLow$="H" and RH=0) or (HighLow$="L" and RL=0) then                                          
+       '  There is no level [Level] HighLow$ to promote above EndRec                                    
+       Exit Sub                                                                                         
+    END IF                                                                                              
+                                                                                                        
+    If HighLow$ = "H" then                                    ' promoting a high                        
+       Call CheckMark(RH, Level+1)                                                                      
+       Call MarkWave(RH, Level+1, WMark$)                     '   Promote RH to HH or LH at Level+1     
+    ElseIf HighLow$ = "L" then                                ' promoting a low                         
+       Call CheckMark(RL, Level+1)                                                                      
+	   Call MarkWave(RL, Level+1, WMark$)                     '   Promote RL to LL or HL at Level+1     
+    End If                                                                                              
+                                                                                                        
+'  ==>  There may be another, previously marked Low or High at Level+1 in the search range that should  
+'  ==>  be revoked by the one just found.  Search again from RH-1/RL-1 to RangeStart and revoke.        
+'  ==>    CHECK  Level 1 HL at 8/19/2020 should be revoked by Level 1 LL on 9/8/2020                    
+                                                                                                        
+   If HighLow$="H" then RangeEnd=RH-1 else RangeEnd=RL-1                                                
+   For RR = RangeStart to RangeEnd                                                                      
+       Get #2, RR                                                                                       
+	   If Wave$(Level+1) <> "   " then                                                                  
+          LSet Wave$(Level+1) = " . ": Put #2,RR                                                        
+          If MaxLevel < Level+1 Then MaxLevel = Level+1  '                                              
+       End If                                                                                           
+   Next RR                                                                                              
+                                                                                                        
+' ==>  It may also be that the low or high that was revoked (just above) has exposed a previous         
+' ==>  Level+1 mark at RangeStart (opposite HighLow$) that was not revoked when it should have been     
+' ==>  due to being protected (shadowed) by the (HighLow$) mark just revoked.  In such a case, there    
+' ==>  will be a maximum/minimum within the Range that is more extreme than the price at RangeStart.    
+' ==>  We can check.  For instance:  If HighLow$ is "L", the mark (Level+1) at RangeStart will be an    
+' ==>  "H".  We have saved (but not used) PHigh! and RH in this example.  If PHigh! at RH is greater    
+' ==>  than PCLOSE$ at RangeStart AND RH comes before RL, then the level+1 mark at RangeStart should    
+' ==>  be revoked and the level+1 mark at RH should be made.                                            
+' ==>  CHECK:  HH at level 1 on 8/12/2020 should be moved to 9/2/2020                                   
+                                                                                                        
+ If RangeStart >1 then                                                                                  
+   Get #2, RangeStart-1                                                                                 
+   If HighLow$ = "L" then                                                                               
+      If PHigh! >= Val(PCLOSE$) and RH < RL then                                                        
+         Call MarkWave(RangeStart-1, Level+1, " . ")         ' Unmark RangeStart                        
+         Call CheckMark(RH, Level+1)                       ' Check RH for HH vs LH                      
+         Call MarkWave(RH, Level+1, WMark$)                ' Mark Level+1 at RH                         
+         ' Recheck promotion                                                                            
+         Call CheckMark(RL, Level+1)                                                                    
+         Call MarkWave(RL, Level+1, WMark$)                ' Promote RL to LL or HL at Level+1          
+      End If                                                                                            
+   Else                                                    ' HighLow$ = "H"                             
+      If PLow! <= Val(PCLOSE$) and RL < RH then                                                         
+         Call MarkWave(RangeStart-1, Level+1, " . ")         ' Unmark RangeStart                        
+         Call CheckMark(RL, Level+1)                       ' Check RL for HL vs LL                      
+         Call MarkWave(RL, Level+1, WMark$)                ' Mark Level+1 at RH                         
+         ' Recheck promotion                                                                            
+         Call CheckMark(RH, Level+1)                                                                    
+         Call MarkWave(RH, Level+1, WMark$)                ' Promote RH to HH or LH at Level+1          
+      End If                                                                                            
+   End If                                                                                               
+ End If                                                                                                 
+End Sub                                                                                                 
+
+
+
+' ..... Mark Wave as Low or High .....................................................................
+Sub MarkWave (REC, DGREE, W$)                                                                         
+    Shared WAVE$(), MaxLevel, MaxDgre%                                                                
+    Shared MSSG$, ANSWER$, DEBUG$                                                                     
+                                                                                                      
+    Get #2, REC                                             '  Get record number REC from WAV file    
+    LSet WAVE$(DGREE) = W$                                  '  Only mark the designated degree        
+    If MaxLevel < DGREE Then MaxLevel = DGREE               '  Max Level edited today                 
+    If W$ = " . " then                                                                                
+	  For DD = DGREE+1 to MaxDgre%                                                                    
+	    If Wave$(DD)<>"   " then                                                                      
+		   LSet Wave$(DD) = " . "                                                                     
+           If MaxLevel < DD Then MaxLevel = DD              ' Max Level edited today                  
+		End If                                                                                        
+	  Next DD                                                                                         
+	End If                                                                                            
+    Put #2, REC                                             ' Save record with new wave mark          
+' -----------------------------------------------------------
+' --- Test to see if the Stack (SYS) can be updated directly 
+'     instead of being completely rebuilt.                   
+'     -->  Yes.  But it may not be worth the work.           
+' -----------------------------------------------------------
+End Sub                                                                                              
+
+
+                                                                         
+Sub CheckMark (CheckRec, CheckDgree)                                     
+    Shared CURRENTREC, CURRENTPX!, CURRENTDT$                            
+    Shared WAVE$(), PCLOSE$, WMark$                                      
+    Shared MSSG$, ANSWER$                                                
+    '   -----------------------------------------------------------------
+    '   WaveLogic has detected a ZEE UP or ZEE DOWN at the current record at degree CheckDgree-1.
+    '   The previous HH (on a zee down) or LL (on a zee up) will be promoted to level DG if it has
+    '   not already been promoted.  The purpose of this routine is to determine if the record to be
+    '   promoted should be a HH or a LH (if it is a high) or a HL or LL (if it is a low).  There is
+    '   a loop which looks back for the previous (appropriate) High or Low at CheckDgree.
+
+    Get #2, CheckRec                                                                              
+    WSave$ = Right$(WAVE$(CheckDgree - 1), 1) ' The record to be checked is either an "H" or "L". 
+    PSave! = Val(PCLOSE$)                     ' Price to check                                    
+    For RR = (CheckRec - 1) To 1 Step -1      ' Look back                                         
+        Get #2, RR                            '                                                   
+        If Right$(WAVE$(CheckDgree), 1) = WSave$ Then     ' Most recent CheckDgree H or L         
+            If WSave$ = "H" Then                          ' checking a High                       
+                If Val(PCLOSE$) < PSave! Then                                                     
+                    WMark$ = " HH"                        ' CheckRec is Higher High               
+                Else                                                                              
+                    WMark$ = " LH"                        ' CheckRec is a Lower High              
+                End If                                                                            
+            Else                                          ' checking a Low                        
+                If Val(PCLOSE$) > PSave! Then                                                     
+                    WMark$ = " LL"                        ' CheckRec is Lower Low                 
+                Else                                                                              
+                    WMark$ = " HL"                        ' CheckRec is a Higher Low              
+                End If                                                                            
+            End If                                                                                
+            Exit Sub                          ' Finished checking against previous same-level     
+        End If                                                                                    
+    Next RR                                   '  Not done, keep looking                           
+    '  If here then:  No previous mark at this degree                                             
+    If WSave$ = "H" Then WMark$ = " HH" Else WMark$ = " LL"     ' Default to HH or LL             
+End Sub                                                                                           
+
+
+Sub CheckPreviousMark (CheckLevel, CheckRec, WSave$, PSave!)                                     
+    Shared CURRENTREC, CURRENTPX!, CURRENTDT$                                                    
+    Shared WAVE$(), PCLOSE$, WMark$                                                              
+    Shared MSSG$, ANSWER$                                                                        
+    '----------------------------------------------------------------------------------------------------
+    '  Look back, starting just before CheckRec, for first previous mark at level CheckLevel of type     
+    '  WSave$ ("H" or "L").  When found, compare PSave! to found price (PCLOSE$) and set WMark$ as a     
+    '  higher or lower version of WSave$.  e.g. If WSave$ = "H", WMark$ will be either "HH" or "LH".     
+    '  If no previous mark is found, return the extreme version, "HH" or "LL".                           
+    '----------------------------------------------------------------------------------------------------
+
+    For RR = (CheckRec - 1) To 1 Step -1                                 ' Look back                     
+        Get #2, RR                                                       '                               
+        If Right$(WAVE$(CheckLevel), 1) = WSave$ Then                    ' Most recent Dgree-0 H or L    
+            If WSave$ = "H" Then                                         ' checking a High               
+                If Val(PCLOSE$) < PSave! Then                                                            
+                    WMark$ = " HH"                                       ' Current Price is Higher High  
+                Else                                                                                     
+                    WMark$ = " LH"                                       ' Current Price is a Lower High 
+                End If                                                                                   
+            Else                                                         ' checking a Low                
+                If Val(PCLOSE$) > PSave! Then                                                            
+                    WMark$ = " LL"                                       ' Current Price is Lower Low    
+                Else                                                                                     
+                    WMark$ = " HL"                                       ' Current Price is a Higher Low 
+                End If                                                                                   
+            End If                                                                                       
+            Exit Sub                                                     ' Finished checking against previous level-0
+        End If                                                                                           
+    Next RR                                                              '  Not done, keep looking       
+    If WSave$ = "H" Then WMark$ = " HH" Else WMark$ = " LL"              ' Default to HH or LL           
+ End Sub
+
+
+
