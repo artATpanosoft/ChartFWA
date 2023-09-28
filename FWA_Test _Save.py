@@ -2,347 +2,396 @@
 import yfinance as yf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import numpy as np
 import pandas as pd
 
+global h, pp, currentRec, currentDate, currentPx, previousDate, previousPx, maxRec
+global maxPx, minPx, minRec, currentDirection, previousDirection, mark
+global zagRec, zigRec, checkhigher, WMark
+
+
+
 ########################################################################
-# FWA from Excel              
+# FWA from QB64              
 #     hist is an 2D array with columns:
 #         0   Open:                                                     #
 #         1   High:                                                     #
 #         2   Low:                                                      #
 #         3   Close:                                                    #
 #         4   Date:                                                     #
-#         5   HL_Zero:                                                  #
-#         6   HHLL_Zero:                                                #
-#         7   Z_Zero:                                                   #
-#         8   Z_Zero_Price:                                             #
-#         9   HL_One:                                                   #
-#        10   HHLL_One:                                                 #
-#        11   Z_One:                                                    #
-#        12   Z_One_Price:                                              #
-#        13   HL_Two:                                                   #
-#        14   HHLL_Two:                                                 #
-#        15   Z_Two:                                                    #
-#        16   Z_Two_Price:                                              #
-
+#         5   HHLL_Zero:   2 char.s "  ", "LL", "HL", "LH", "HH", ". "  #
+#         6   HHLL_One:    2 char.s "  ", "LL", "HL", "LH", "HH", ". "  #
+#         7   HHLL_Two:    2 char.s "  ", "LL", "HL", "LH", "HH", ". "  #
+#         8   HHLL_Three:  2 char.s "  ", "LL", "HL", "LH", "HH", ". "  #
+#         9   Close_One:           Close, if level-1 mark               #
+#        10   Close_Two:           Close, if level-2 mark               #
+#        11   Close_Three:         Close, if level-3 mark               #
+#        12   Scratch_1:                                                #
+#        13   Scratch_2:                                                #
+#        14   Scratch_3:                                                #
 #########################################################################
 
 
-def do_HL_Zero():
-    global h, lastDataRow                                       #
-    trend = 0                 #  no trend
+def Initialize():
+    global currentRec, currentDate, currentPx, previousDate, previousPx, maxRec
+    global h, maxPx, maxRec, minPx, minRec, currentDirection, previousDirection, minPx
+    global pp
 
-    for n in range(1,lastDataRow-1):
-        h[n,5] = ""       # Blank out existing HL data
-        PreviousPrice = h[n-1, 3]
-        ThisPrice     = h[n,3]
-        NextPrice     = h[n+1,3]
+    currentRec = 1                              
+    currentDate = h[1,4]                        
+    currentPx = h[1,3]                          
+    previousDate = h[0,4]                       
+    previousPx = h[0,3]
+    currentDirection = ""
 
-        if (ThisPrice > PreviousPrice):
-            trend = 1                         # trend is up
-            if (ThisPrice > NextPrice):
-                h[n, 5] = "H"                 # this price is a local high (H)
-        elif (ThisPrice < PreviousPrice):
-            trend = -1                        # trend is down
-            if (ThisPrice < NextPrice):
-                h[n,5] = "L"                  # this price is a local low (L)
-        else:                                 # this price is the same as previous price
-            if (ThisPrice > NextPrice) and (trend == 1):
-                h[n, 5] = "H"                 # this price is a local high (H)
-            if (ThisPrice < NextPrice) and (trend == -1):
-                h[n, 5] = "L"                 # this price is a local low (L)
+    pp = ["     " for x in range(10)]
 
-
-
-def do_HHLL_Zero():
-# Sub sets a blank or one of "HH", "LH", "HL" or "LL"   #
-# in each row of Column 5                               #
-# Column 3 is Close, Column 4 is "H","L" or blank       #
-    global h, lastDataRow
-
-    for n in range(0,lastDataRow-1):
-        h[n,6] = ""
-        HL = h[n,5]                              # HL is either "H" or "L" or blank
-        if (HL != ""):                           # If the entry is a blank, row is blank
-            PXHL = h[n,3]                        # Price at Current H/L is in column 3
-            for m in range(n-1,0,-1):
-                if (h[m,5] == HL):               # Find most recent  H/L
-                    PPHL = h[m, 3]               # Previous H/L Price
-                    if (HL == "H"):              # Working with an "H"
-                        if PXHL >= PPHL:
-                            h[n, 6] = "HH"       # Higher H
-                        else:
-                            h[n,6] = "LH"        # Lower H
-                    else:                        # Working on an "L"
-                        if PXHL <= PPHL:
-                            h[n,6] = "LL"        # Lower L
-                        else:
-                            h[n,6] = "HL"        # Higher L
-                    break                        #  Exit For m = loop
-            ###                                  Next m
-    ###             Next n
+    if currentPx >= previousPx:
+        maxPx = currentPx                       
+        maxRec = 1                              
+        minPx = previousPx                      
+        minRec = 0                              
+        currentDirection = "Up"
+    else:                                       
+        maxPx = previousPx                      
+        maxRec = 0                              
+        minPx = currentPx                       
+        minRec = 1                              
+        currentDirection = "Down"
+#---- End Initialize ---------------------------
 
 
+def WaveLogic():                       # currentRec == n in loop         
+    global currentRec, currentDate, currentPx, previousDate, previousPx  
+    global h, maxPx, maxRec, minPx, minRec, currentDirection, mark       
+    global pp, zagRec, checkhigher, previousDirection                    
 
-def do_Z_Zero():
-# Sub sets a blank or "ZEE UP" or "ZEE DOWN"   #
-# in each row of Column 7                               #
-    global h, lastDataRow
+    previousPx = currentPx
+    previousDate = currentDate                                           
+    currentPx = h[currentRec,3]                                          
+    currentDate = h[currentRec, 4]
 
-    for n in range(2, lastDataRow-1):
-        Z = h[n,6]                                 # HH, HL, LH or LL in column 5
-        h[n,7] = ""                                # Row starts blank
-        h[n,8] = ""
-        if ((Z == "HH") or (Z == "LL")):           # Possible end of Zee Pattern
-            for m in range(n-1, 1, -1):
-                Q = h[m, 6]                        # HH, HL, LH or LL in column 5
-                if (len(Q)>1 ):
-                    Pattern = Q + "-" + Z          # Pattern is 5 character string
-                    if (Pattern == "HL-HH"):
-                        h[n, 7] = "ZEE UP"
-                        h[n, 8] = h[n, 3]          # Add Price if ZEE
-                        break                      ###  Exit For - found a Z pattern
-                    elif (Pattern == "LH-LL"):
-                        h[n, 7] = "ZEE DOWN"
-                        h[n, 8] = h[n, 3]          # Add Price if ZEE
-                        break                      ###  Exit For - found a Z pattern
-                    ###  End If
-                    break                          ###  Exit For - found a non-Z pattern
-                ### End If
-            ### Next m
-        ### End If
-    ### Next n
+    previousDirection = currentDirection
 
-#-----------------------------------------------------------------------------------
-# Level-1 routines
-#-----------------------------------------------------------------------------------
+    if currentPx > previousPx:                                           
+        currentDirection = "Up"
+    elif currentPx < previousPx:                                         
+        currentDirection = "Down"
+    else:                                                                
+        pass                                                             
+        #  if price is the same, currentDirection is the same            
 
-def do_HL_One():
-    global h, lastDataRow
+    #' -------------------------------------------
+    #' Check for Level 0 turn and mark            
+    #' -------------------------------------------
+    if currentDirection != previousDirection:                     # Change of Direction               
+        if currentDirection == "Up":                                                                  
+            CheckPreviousMark(0, currentRec, "H", currentPx)      # New direction is up; HL or HH ??  
+        else:                                                                                         
+            CheckPreviousMark(0, currentRec, "L", currentPx)      # New direction is down; LL or HL ??
+    else:                                                         # Same Direction                    
+        h[currentRec-1, 5] = ". "                                 # erase previous record mark        
+        if currentDirection == "Up":                                                                  
+            CheckPreviousMark(0, currentRec, "H", currentPx)      # New direction is up; HL or HH ??  
+        else:                                                                                         
+            CheckPreviousMark(0, currentRec, "L", currentPx)      # New direction is down; LL or HL ??
 
-# -- Find first non-blank pattern
-    for n in range(2,lastDataRow-1):
-        NewPattern = h[n,7]                   # blank, ZEE UP, or ZEE Down
-        if (len(NewPattern) > 0):             # a ZEE pattern end
-            if (NewPattern == "ZEE UP"):      # Is this pattern a ZEE UP
-                h[n, 9] = "H"                 # Yes; Set High of Level-One ZEE UP series
-            else:
-                h[n, 9] = "L"                 # No; Set Low of Level-One ZEE DOWN series
-            ###   End If
-            OldPattern = NewPattern           # save the previous pattern
-            OldPrice = h[n,3]                 # price at end of previous ZEE pattern
-            oldn = n                          # save row number of previous ZEE pattern
-            break                             # Exit For loop:  first Zee pattern found
-        ### End if
-    ###  Next n
+#   ' ------------------------------------------------------------------ 
+#   ' At each degree check for a zig-zag penetration that promotes a     
+#   ' recent pullup or pullback to the next level.  For instance a LH    
+#   ' and then a LL at level zero is a ZEE DOWN that would raise the     
+#   ' most recent level zero zig-zag HH to level 1.                      
+#   ' Note Shadowing logic:  The most recent zig-zag HH may not be the   
+#   ' highest zig-zag HH since the previous ZEE DOWN, a requirement.     
+#   ' ------------------------------------------------------------------ 
+
+    checkhigher = True                  # check higher levels if needed
+    CheckPatternAndPromote(0)                                            
+    if checkhigher:                                                      
+        # MessageAndWait("CheckPatternAndPromote-1")
+        CheckPatternAndPromote(1)
+        if checkhigher:
+            # MessageAndWait("CheckPatternAndPromote-2")
+            CheckPatternAndPromote(2)
+            if checkhigher:
+                # MessageAndWait("CheckPatternAndPromote-3")
+                CheckPatternAndPromote(3)
 
 
-    for n in range(oldn + 1, lastDataRow):       # move forward from ZEE pattern
-        NewPattern = h[n, 7]                  # potential next pattern
-        if (len(NewPattern) > 0):             # found next ZEE pattern end
-            NewPrice = h[n,3]                 # price at end of next pattern
-            if (NewPattern == OldPattern):         # Does NextPattern match previous Pattern?
-                if (NewPattern == "ZEE DOWN"):     # Yes; two matching ZEE DOWN patterns in a row
-                    if (NewPrice <= OldPrice):     # Is the new price equal or lower than previous
-                        h[oldn, 9] = ""            # erase H from previous ZEE DOWN
-                        h[n, 9] = "L"              # mark this as Low of ZEE DOWN series
-                        OldPrice = NewPrice        # Yes; Save Price at new ZEE DOWN Low
-                        oldn = n                   # save row number of previous ZEE DOWN
-                    ###  End If
-                else:                              # No, but: two matching ZEE UP patterns in a row
-                    if (NewPrice >= OldPrice):        # Is the new price equal or higher than previous
-                        h[oldn, 9] = ""            # erase H from previous ZEE UP
-                        h[n, 9] = "H"              # mark this as High of ZEE UP series
-                        OldPrice = NewPrice        # Yes; Save Price at new ZEE UP High
-                        oldn = n                   # save row number of previous ZEE UP
-                    ###  End If
-                ###  End If
-            else:                             # The ZEE Pattern is different than previous
-                if (NewPattern == "ZEE UP"):       # Is new pattern a ZEE UP
-                    h[n, 9] = "H"                  # Yes; Set High of Level-One ZEE UP series
+def CheckPatternAndPromote(level):                                                            
+    global checkhigher, pp, zagRec                                                            
+
+    GetPattern(level)                                             # Level 1 pattern           
+    if pp[level] == "HL-HH":                           # Is pattern a zig-zag up?
+        # m = "At level="+str(level)+" pattern= HL-HH. Promote lowest previous LL"
+        # MessageAndWait(m)
+        Promote(zagRec, "L", level)   # Promote lowest recent LL-1 to HL-2 or LL-2
+    elif pp[level] == "LH-LL":                         # Is pattern a zig-zag dn?             
+        # m = "At level="+str(level)+" pattern= LH-LL. Promote highest previous HH"
+        # MessageAndWait(m)
+        Promote(zagRec, "H", level)   # Promote highest recent HH-1 to HH-2 or LH-2
+    else:                                                                                     
+        checkhigher = False       # nothing to check at higher levels                         
+    #  End If                                                                                 
+# --- End of CheckPatternAndPromote()-------------------------------------                    
+
+
+def CheckPreviousMark(level, rec, hl, px):                                                               
+    global currentRec, mark, h                                                                           
+#    '---------------------------------------------------------------------------------------------------
+#    '  Look back, starting just before rec, for first previous mark at level level of type              
+#    '  hl ("H" or "L").  When found, compare price at that rec vs px and  set h[rec, level+5] as a      
+#    '  higher or lower version of hl.  e.g. If hl = "H", h[] will be either "HH" or "LH".               
+#    '  If no previous mark is found, set h[] to "HH" or "LL".                                           
+#    '---------------------------------------------------------------------------------------------------
+    if hl == "" or hl == " ":
+        return                                                           # Initial run in same direction: no marks
+
+    for r in range(rec - 1, 1, -1):                                      # Look back
+        mark = h[r, level+5]                                             # mark at rec=r, level=l
+        m = mark[-1]                                                     # "H" or "L" or none
+        if m == hl:                                                      # matched type                  
+            if hl == "H":                                                # checking a High
+                if h[r, 3] < px:                                         # check price vs px
+                    h[rec, level+5] = "HH"                               # Current Price is Higher High
+                    # m = "Rec is marked HH"
+                    # MessageAndWait(m)
                 else:
-                    h[n, 9] = "L"                  # No; Set Low of Level-One ZEE DOWN series
-                ###   End If
-                OldPattern = NewPattern           # Current Pattern
-                OldPrice = h[n, 3]                # Save price at end of pattern
-                oldn = n                          # save row number of previous ZEE pattern
-            ###  End If
-        ###  End If
-    ###  Next n
-
-
-def do_HHLL_One():
-    global h, lastDataRow
-
-    for m in range(2, lastDataRow):
-        h[m, 10] = ""                              # row starts blank
-        HL = h[m, 9]                               # HL is either "H" or "L" or blank
-        if (len(HL) > 0):                          # If the entry is not blank
-            PXHL = h[m, 3]                         # Price at Current H/L is in 3
-            for n in range(m - 1,1,-1):            # look back for previous matching HL
-                if (h[n, 9] == HL):                # if a match
-                    PPHL = h[n, 3]                 # Previous H/L Price
-                    if (HL == "H"):                # Working with an "H"
-                        if PXHL >= PPHL:
-                            h[m, 10] = "HH"        # Higher than previous H
-                        else:
-                            h[m, 10] = "LH"        # Lower than previous H
-                        ###  End If
-                    else:                         # Working on an "L"
-                        if PXHL <= PPHL:
-                            h[m, 10] = "LL"       # Lower than previous L
-                        else:
-                            h[m, 10] = "HL"       # Higher than previous L
-                        ###      End If
-                    ###  End If
-                    break                         # Done this m, exit n loop
-                ###   End If
-            ###  Next n
-        ###  End If
-    ###  Next m
-
-def do_Z_One():
-    global h, lastDataRow
-
-    for n in range(2, lastDataRow-1):
-        Z = h[n, 10]                          # HH, HL, LH or LL in column 10
-        h[n, 11] = ""                         # Row starts blank
-        h[n, 12] = ""                         # Price starts blank
-        if ((Z == "HH") or (Z == "LL")):
-            for m in range(n - 1,1,-1):
-                Q = h[m, 10]
-                if (len(Q)>1 ):
-                    Pattern = Q + "-" + Z    # Pattern is 5 character
-                    if (Pattern == "HL-HH"):
-                        h[n, 11] = "ZEE UP"
-                        h[n, 12] = h[n, 3]
-                        break     ###  Exit For m loop
-                    elif (Pattern == "LH-LL"):
-                        h[n, 11] = "ZEE DOWN"
-                        h[n, 12] = h[n, 3]
-                        break  ###   Exit For m loop
-                    ###   End If
-                    break  ###    Exit For
-                ###  End If
-            ###  Next m
-        ###  End If
-    ###  Next n
-
-
-def do_HL_Two():
-    global h, lastDataRow
-
-    # -- Find first non-blank pattern
-    for n in range(2, lastDataRow-1):
-        NewPattern = h[n,11]                   # blank, ZEE UP, or ZEE Down
-        if (len(NewPattern) > 0):              # a ZEE pattern end
-            if (NewPattern == "ZEE UP"):       # Is this pattern a ZEE UP
-                h[n, 13] = "H"                 # Yes; Set High of Level-One ZEE UP series
-            else:
-                h[n, 13] = "L"                 # No; Set Low of Level-One ZEE DOWN series
-            ###   End If
-            OldPattern = NewPattern            # save the previous pattern
-            OldPrice = h[n, 3]                 # price at end of previous ZEE pattern
-            oldn = n                           # save row number of previous ZEE pattern
-            break                              # Exit For loop:  first Zee pattern found
-        ### End if
-    ###  Next n
-
-    for n in range(oldn + 1, lastDataRow):         # move forward from ZEE pattern
-        NewPattern = h[n, 11]                      # potential next pattern
-        if (len(NewPattern) > 0):                  # found next ZEE pattern end
-            NewPrice = h[n,3]                      # price at end of next pattern
-            if (NewPattern == OldPattern):         # Does NextPattern match previous Pattern?
-                if (NewPattern == "ZEE DOWN"):     # Yes; two matching ZEE DOWN patterns in a row
-                    if (NewPrice <= OldPrice):     # Is the new price equal or lower than previous
-                        h[oldn, 13] = ""           # erase H from previous ZEE DOWN
-                        h[n, 13] = "L"             # mark this as Low of ZEE DOWN series
-                        OldPrice = NewPrice        # Yes; Save Price at new ZEE DOWN Low
-                        oldn = n                   # save row number of previous ZEE DOWN
-                    ###  End If
-                else:                              # No, but: two matching ZEE UP patterns in a row
-                    if (NewPrice >= OldPrice):     # Is the new price equal or higher than previous
-                        h[oldn, 13] = ""           # erase H from previous ZEE UP
-                        h[n, 13] = "H"             # mark this as High of ZEE UP series
-                        OldPrice = NewPrice        # Yes; Save Price at new ZEE UP High
-                        oldn = n                   # save row number of previous ZEE UP
-                    ###  End If
-                ###  End If
-            else:                                  # The ZEE Pattern is different than previous
-                if (NewPattern == "ZEE UP"):       # Is new pattern a ZEE UP
-                    h[n, 13] = "H"                 # Yes; Set High of Level-One ZEE UP series
+                    h[rec, level+5] = "LH"                               # Current Price is a Lower High
+                    # m = "Rec is marked LH"
+                    # MessageAndWait(m)
+                #  End If
+            elif hl == "L":                                                        # checking a Low
+                if h[r, 3] > px:
+                    h[rec, level+5] = "LL"                                # Current Price is Lower Low
+                    # m = "Rec is marked LL"
+                    # MessageAndWait(m)
                 else:
-                    h[n, 13] = "L"                 # No; Set Low of Level-One ZEE DOWN series
-                ###   End If
-                OldPattern = NewPattern            # Current Pattern
-                OldPrice = h[n, 3]                 # Save price at end of pattern
-                oldn = n                           # save row number of previous ZEE pattern
-            ###  End If
-        ###  End If
-    ###  Next n
+                    h[rec, level+5] = "HL"                                # Current Price is a Higher Low
+                    # m = "Rec is marked HL"
+                    # MessageAndWait(m)
+                #  End If
+            #  End If                                                                                    
+            #  mark = h[rec,level+5]                                     # pass mark back                
+            return                                                       # Finished checking             
+        #  End If                                                                                        
+    #  Next r                                                            #  Not done, keep looking       
+    if hl == "H":
+        h[rec, level+5] = "HH"                                           # set H as HH
+    elif hl == "L":                                                      #
+        h[rec, level+5] = "LL"                                           # set L as LL
 
-def do_HHLL_Two():
-    global h, lastDataRow
-
-    for m in range(2, lastDataRow):
-        h[m, 14] = ""                              # row starts blank
-        HL = h[m, 13]                              # HL is either "H" or "L" or blank
-        if (len(HL) > 0):                          # If the entry is not blank
-            PXHL = h[m, 3]                         # Price at Current H/L is in 3
-            for n in range(m - 1,1,-1):            # look back for previous matching HL
-                if (h[n, 13] == HL):               # if a match
-                    PPHL = h[n, 3]                 # Previous H/L Price
-                    if (HL == "H"):                # Working with an "H"
-                        if PXHL >= PPHL:
-                            h[m, 14] = "HH"        # Higher than previous H
-                        else:
-                            h[m, 14] = "LH"        # Lower than previous H
-                        ###  End If
-                    else:                          # Working on an "L"
-                        if PXHL <= PPHL:
-                            h[m, 14] = "LL"        # Lower than previous L
-                        else:
-                            h[m, 14] = "HL"        # Higher than previous L
-                        ###      End If
-                    ###  End If
-                    break                          # Done this m, exit n loop
-                ###   End If
-            ###  Next n
-        ###  End If
-    ###  Next m
+# End Sub
 
 
-def do_Z_Two():
-    global h, lastDataRow
+def MarkWave(rec, level, hl):
+    global h   
+                                                                                                      
+    h[rec,level+5] = hl                        # put H/L mark passed at (rec, level)                  
+    if hl == ".":                              # if erasing                                           
+        h[rec,level+5] = ". "                  # Two characters                                       
+        if level < 3:                          # level might be 0, 1, 2
+            for l in range(level+1,3):         # l would be (1,2,3), (2,3), (3)
+                if h[rec,l+5] != "  ":
+                    h[rec, l+5] = ". "             # erase all levels previously marked
+                ## End If
+            ## Next l
+        ## End if
+    ##  End If
 
-    for n in range(2, lastDataRow-1):
-        Z = h[n, 14]                          # HH, HL, LH or LL in column 10
-        h[n, 15] = ""                         # Row starts blank
-        h[n, 16] = ""                         # Price starts blank
-        if ((Z == "HH") or (Z == "LL")):
-            for m in range(n - 1,1,-1):
-                Q = h[m, 14]
-                if (len(Q)>1 ):
-                    Pattern = Q + "-" + Z    # Pattern is 5 character
-                    if (Pattern == "HL-HH"):
-                        h[n, 15] = "ZEE UP"
-                        h[n, 16] = h[n, 3]
-                        break     ###  Exit For m loop
-                    elif (Pattern == "LH-LL"):
-                        h[n, 15] = "ZEE DOWN"
-                        h[n, 16] = h[n, 3]
-                        break  ###   Exit For m loop
-                    ###   End If
-                    break  ###    Exit For
-                ###  End If
-            ###  Next m
-        ###  End If
-    ###  Next n
+def GetPattern(checklevel):                                                                          
+    global currentRec, zagRec, zigRec, h
+    global pp
+#   '   ---------------------------------------------------------------------------------------------
+#   '   Starting with CurrentRec, set Pattern$(CheckLevel) as "HL-HH", "LH-LL", etc.                 
+#   '   We are setting the pattern to determine if a zig-zag has been completed at level CheckLevel. 
+#   '   ---------------------------------------------------------------------------------------------
+
+    pp[checklevel] = "     "                                  # start blank                          
+    for r in range(currentRec,1,-1):                          # look back                            
+        wsave = h[r, 5+checklevel]                            # The record r wavemark at checklevel  
+        if wsave[-1] == "H" or wsave[-1] == "L":              # Found recent mark at CheckLevel      
+            zagRec = r                                        # pattern ends at zagrec               
+            for rr in range(r-1,1,-1):                        # Look back                            
+                wwsave = h[rr, 5+checklevel]                                                         
+                if wwsave[-1] == "H" or wwsave[-1] == "L":    # Most recent prior CheckLevel Mark    
+                    pp[checklevel] = wwsave+"-"+wsave                                                
+                    zigRec = rr                   # pattern starts at zigRec                         
+                    return  #  Exit Sub           # found pattern, done here                            
+               #  End If                                                                                
+            #  Next RR                                                                                  
+            return #  Exit Sub                    # No mark prior to most recent ==> No pattern         
+        #  End If                                                                                       
+    # Next r '  Not done, keep looking                                                                  
+#  End Sub                                                                                              
+
+
+def Promote(endrec, hl, level):
+    global h, WMark
+    #---------------------------------------------------------------------------------------------------
+    # hl is the type of extreme that will be promoted.
+    # If hl is "H" :
+    #     This routine will Promote the highest HH-[Level] since most recent previous
+    #     [Level+1] Low (opposite to hl) to LH or HH at level [Level+1]
+    #---------------------------------------------------------------------------------------------------
+    # The search period begins at the most recent previous [hl-opposite] at level [Level + 1]
+    # The look-back period ends at endrec.  endrec is the record at the end of the current zig-zag.
+    if hl == "H":                                                                                       
+       w="L"             # promoting a high; looking for beginning at a Level+1 Low                     
+    else:                                                                                               
+       w="H"             # promoting a low; looking for the beginning at a Level+1 high                 
+    #  End If                                                                                           
+    m = "In Promote: level="+str(level)+" hl="+hl+" endrec="+str(endrec)
+    # MessageAndWait(m)
+
+    RangeStart=1                                              #  if hl-opposite at level+1 not found
+    for r in range(endrec-1,1,-1):                                                                      
+        mw = h[r,level+6]                                     #  mw is the wave mark at (rec, level+1)
+        if mw[-1] == w:                                       #  Is mw what we are looking for
+           RangeStart=r+1                                     #  Start looking forward at r+1
+           # m = "hl opposite (+1) found at record r="+str(r)
+           # MessageAndWait(m)
+           break                                              #  Found previous hl Opposite
+        # End If                                                                                        
+    # Next r
+
+    Low = 999999
+    High = 0
+    RLow = 0
+    RHigh = 0
+
+    for r in range(RangeStart, endrec):                       # Look forward for extreme hl point
+        mw = h[r,level+5]                                     # mw is the wave mark at (rec, level)
+        if mw[-1] == hl:                                      # Found hl at level
+           if h[r,3] <= Low:                                  # Save (most recent) Low
+               Low = h[r,3]                                                                             
+               RLow = r                                       # Track Lowest                            
+           if h[r,3] >= High:                                 # Save (most recent) High
+               High = h[r,3]                                                                            
+               RHigh = r                                      # Track Highest                           
+        # End If                                                                                        
+    # Next r                                                  # Keep looking for hl extreme
+
+    # m = "High = "+str(High)+" at rec="+str(RHigh)+".. Low = "+str(Low)+" at rec="+str(RLow)
+    # MessageAndWait(m)
+
+    if (hl == "H" and RHigh == 0) or (hl == "L" and RLow == 0):
+       #  There is no level [Level] HighLow$ to promote above EndRec                                    
+       return # Exit Sub                                                                                
+    # END IF                                                                                            
+                                                                                                        
+    if hl == "H":                                             # promoting a high                        
+       CheckMark(RHigh, level+1)                                                                        
+       MarkWave(RHigh, level+1, WMark)                        # Promote RH to HH or LH at Level+1
+       # m = "Marked High at level="+str(level+1)
+       # MessageAndWait(m)
+    elif hl == "L":                                           # promoting a low
+       CheckMark(RLow, level+1)                                                                         
+       MarkWave(RLow, level+1, WMark)                         # Promote RL to LL or HL at Level+1
+       # km m = "Marked Low at level=" + str(level + 1)
+       # MessageAndWait(m)
+    # End If
+                                                                                                        
+#  ==>  There may be another, previously marked Low or High at Level+1 in the search range that should  
+#  ==>  be revoked by the one just found.  Search again from RH-1/RL-1 to RangeStart and revoke.        
+#  ==>    PROOF:  Level 1 HL at 8/19/2020 should be revoked by Level 1 LL on 9/8/2020                   
+                                                                                                        
+    if hl=="H":
+        RangeEnd=RHigh-1
+    else:
+        RangeEnd=RLow-1
+    for r in range(RangeStart, RangeEnd):
+        if len(h[r, level+6]) > 0:
+            h[r, level+6] = ". "
+            # MessageAndWait("Wave at r="+str(r)+" level="+str(level+1)+" erased")
+            #  if If MaxLevel < Level+1 Then MaxLevel = Level+1
+        # End If
+    # Next RR
+                                                                                                        
+# ==>  It may also be that the low or high that was revoked (just above) has exposed a previous         
+# ==>  Level+1 mark at RangeStart (opposite HighLow$) that was not revoked when it should have been     
+# ==>  due to being protected (shadowed) by the (HighLow$) mark just revoked.  In such a case, there    
+# ==>  will be a maximum/minimum within the Range that is more extreme than the price at RangeStart.    
+# ==>  We can check.  For instance:  If hl is "L", the mark (Level+1) at RangeStart will be an
+# ==>  "H".  We have saved (but not used) High and RHigh in this example.  If PxHigh at RHigh is greater
+# ==>  than Px at RangeStart AND RHigh comes before RLow, then the level+1 mark at RangeStart should
+# ==>  be revoked and the level+1 mark at RH should be made.                                            
+# ==>  DOUBLE-CHECK:  HH at level 1 on 8/12/2020 should be moved to 9/2/2020
+                                                                                                        
+    if RangeStart > 1:                                                                                  
+        r = RangeStart-1                                                                                
+        if hl == "L":
+            if (High >= h[r, 3]) and (RHigh < RLow):
+                MarkWave(r, level+6, ". ")                # Unmark RangeStart
+                CheckMark(RHigh, level+6)                    # Check RH for HH vs LH
+                MarkWave(RHigh, level+6, WMark)              # Mark Level+1 at RH
+                # Recheck promotion                                                                     
+                CheckMark(RLow, level+6)
+                MarkWave(RLow, level+6, WMark)               # Promote RL to LL or HL at Level+1
+            #   End If                                                                                  
+        elif hl == "H":                                      # HighLow$ = "H"
+            if (Low <= h[r, 3]) and (RLow < RHigh):
+                MarkWave(r-1, level+6, ". ")             # Unmark RangeStart
+                CheckMark(RLow, level+6)                     # Check RL for HL vs LL
+                MarkWave(RLow, level+6, WMark)               # Mark Level+1 at RH
+                # Recheck promotion                                                                     
+                CheckMark(RHigh, level+6)
+                MarkWave(RHigh, level+6, WMark)               # Promote RH to HH or LH at Level+1
+            # End If                                                                                    
+        # End If                                                                                        
+    # End If                                                                                            
+### End Sub                                                                                             
+
+
+def CheckMark (CheckRec, CheckDgree):
+    global  h, WMark                                                                               
+    #   -----------------------------------------------------------------                          
+    #   WaveLogic has detected a ZEE UP or ZEE DOWN at the current record at degree CheckDgree-1.  
+    #   The previous HH (on a zee down) or LL (on a zee up) will be promoted to level DG if it has 
+    #   not already been promoted.  The purpose of this routine is to determine if the record to be
+    #   promoted should be a HH or a LH (if it is a high) or a HL or LL (if it is a low).  There is
+    #   a loop which looks back for the previous (appropriate) High or Low at CheckDgree.          
+
+    #Get #2, CheckRec                                                                             
+    wm = h[CheckRec,CheckDgree+4]               # WaveMark at CheckDgree -1 == current mark
+    if wm == "":
+        # MessageAndWait("CheckRec, w ="+str(CheckRec)+" *"+w+"*")
+        WMark = "**"
+        return
+    WSave = wm[-1]                            # The record to be checked is either an "H" or "L".
+    PSave = h[CheckRec,3]                     # Price to check                                    
+    for r in range(CheckRec - 1, 1, -1):      # Look back
+        wm = h[r, CheckDgree+5]               # Get #2, RR  checking dgree to be promoted to
+        if wm[-1] == WSave:                   # Most recent CheckDgree H or L
+            if WSave == "H":                              # checking a High                       
+                if h[r,3] <= PSave:
+                    WMark = "HH"                          # CheckRec is Higher High               
+                else:                                                                             
+                    WMark = "LH"                          # CheckRec is a Lower High              
+                # End If                                                                          
+            else:                                         # checking a Low                        
+                if h[r,3] >= PSave:
+                    WMark = "LL"                          # CheckRec is Lower Low                 
+                else:                                                                             
+                    WMark = "HL"                          # CheckRec is a Higher Low              
+                # End If                                                                          
+            # End If                                                                              
+            return  # Exit Sub                # Finished checking against previous same-level
+        # End I                                                                                   
+    # Next RR                                 # Not done, keep looking                            
+    #                                         # If here then:  No previous mark at this degree    
+    if WSave == "H":                                                                              
+        WMark = "HH"                                                                              
+    else:                                                                                         
+        WMark = "LL"                                      # Default to HH or LL                   
+# ###  End Sub
+
+def MessageAndWait(m):
+    input(m)
+
 
 
 tick = yf.Ticker('^DJI')                       # Dow Jones Industrial Average
-hist = tick.history(start='2015-10-01', end='2023-08-30')
+hist = tick.history(start='2020-01-02', end='2023-09-26')
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', 1000)
@@ -354,71 +403,72 @@ del hist ['Dividends']            # delete Dividend data
 del hist ['Stock Splits']         # delete Splits data
 hist['Date'] = hist.index         # create a new column with the datetime index value
 
-hist['HL_Zero'] = ""          # create new columns for constructing FWA data
-hist['HHLL_Zero'] = ""
-hist['Z_Zero'] = ""
-hist['Z_Zero_Price'] = ""
+hist['HHLL_Zero'] = ""          # create new columns for constructing FWA data
+hist['HHLL_One'] = ""                                                         
+hist['HHLL_Two'] = ""                                                         
+hist['HHLL_Three'] = ""                                                       
 
-hist['HL_One'] = ""
-hist['HHLL_One'] = ""
-hist['Z_One'] = ""
-hist['Z_One_Price'] = ""
+hist['Close_One'] = ""                                                        
+hist['Close_Two'] = ""                                                        
+hist['Close_Three'] = ""                                                      
 
-hist['HL_Two'] = ""
-hist['HHLL_Two'] = ""
-hist['Z_Two'] = ""
-hist['Z_Two_Price'] = ""
+hist['Scratch_One'] = ""                                                      
+hist['Scratch_Two'] = ""                                                      
+hist['Scratch_Three'] = ""                                                    
 
-# Open High Low Close Date   HL_Zero HHLL_Zero Z_Zero Z_Zero_Price
-#                            HL_One HHLL_One Z_One Z_One_Price
-#                            HL_Two HHLL_Two Z_Two Z_Two_Price
+h = hist.to_numpy()          # Create numpy Matrix from pd DataFrame          
 
-h = hist.to_numpy()          # Create numpy Matrix from pd DataFrame
-
-lastDataRow = len(h)         # number of rows of data
-for i in range(0, lastDataRow):
-    h[i, 0]=round(h[i, 0])   # Open  rounded
-    h[i, 1]=round(h[i, 1])   # High  rounded
-    h[i, 2]=round(h[i, 2])   # Low   rounded
-    h[i, 3]=round(h[i, 3])   # Close rounded
-    h[i, 4]=h[i, 4].strftime("%Y")+h[i, 4].strftime("%m")+h[i, 4].strftime("%d")   # YYYYMMDD
-
-
-do_HL_Zero()                # fill column 5, HL_Zero, with H or L at end of up or down moves
-do_HHLL_Zero()              # fill column 6, HHLL_Zero, with HH, LH, HL or LL as appropriate
-do_Z_Zero()                 # fill column 7, Z_Zero, with ZEE UP or ZEE DOWN for end of zig-zags
-                            # fill column 8, Z_Zero_Price, with close price at zig-zag completion
-do_HL_One()                 # fill column 9, HL_One, with H or L at end of Level-Zero ZEE moves
-do_HHLL_One()               # fill column 10, HHLL_One, with HH, LH, HL, or LL as appropriate
-do_Z_One()                  # fill column 11, Z_One, with ZEE UP or ZEE DOWN for end of zig-zags
-                            # fill column 12, Z_One_Price, with close price at zig-zag completion
-do_HL_Two()                 # fill column 13, HL_Two, with H or L at end of Level-Zero ZEE moves
-do_HHLL_Two()               # fill column 14, HHLL_Two, with HH, LH, HL, or LL as appropriate
-do_Z_Two()                  # fill column 15, Z_Two, with ZEE UP or ZEE DOWN for end of zig-zags
-                            # fill column 16, Z_Two_Price, with close price at zig-zag completion
+lastDataRow = len(h)         # number of rows of data                         
+for i in range(0, lastDataRow):                                               
+    h[i,  0]=round(h[i, 0])   # Open  rounded
+    h[i,  1]=round(h[i, 1])   # High  rounded
+    h[i,  2]=round(h[i, 2])   # Low   rounded
+    h[i,  3]=round(h[i, 3])   # Close rounded
+    h[i,  4]=h[i, 4].strftime("%Y")+h[i, 4].strftime("%m")+h[i, 4].strftime("%d")   # YYYYMMDD
+    h[i,  5] = "  "
+    h[i,  6] = "  "
+    h[i,  7] = "  "
+    h[i,  8] = "  "
+    h[i,  9] = ""
+    h[i, 10] = ""
+    h[i, 11] = ""
 
 
-print('Date   Close  HL_Zero   HHLL_Zero   Z_Zero   HL_One   HHLL_One  Z_One  HL_Two  HHLL_Two')
+Initialize()
+
+
+for n in range(2, lastDataRow):
+    currentRec = n
+    WaveLogic()
+
+for n in range(2, lastDataRow):
+    if h[n, 6] in ["HH", "HL", "LL", "LH"]:
+        h[n, 9] = h[n, 3]
+    if h[n, 7] in ["HH", "HL", "LL", "LH"]:
+        h[n, 10] = h[n, 3]
+    if h[n, 8] in ["HH", "HL", "LL", "LH"]:
+        h[n, 11] = h[n, 3]
+
+
+# ------- End of main loop ---------------------------
+
+print('Date   Close  HHLL_Zero   HHLL_One   HHLL_Two  HHLL_Three   Close_One  Close_Two  Close_Three')
 for i in range(0, len(h)):
-    print(h[i,4], h[i,3], h[i,5], h[i,6], h[i,9], h[i,10], h[i,12], h[i,13], h[i,14], h[i,16] )
-
-
+    print(h[i, 4], h[i, 3], h[i, 5], h[i, 6], h[i, 7], h[i, 8], h[i, 9], h[i, 10], h[i, 11] )
 
 hist2 = pd.DataFrame(h)                                 # Create hist2 dataframe from h[] to make chart
 
-hist2[4]= pd.to_datetime(hist2[4])            # convert date column to datetime
+hist2[4] = pd.to_datetime(hist2[4])                     # convert date column to datetime
 
-#print(hist2)
+# print(hist2)
 
-hist2['diff'] = hist2[3] - hist2[0]                      # Close - Open determines candlestick color
+hist2['diff'] = hist2[3] - hist2[0]                     # Close - Open determines candlestick color
 hist2.loc[hist2['diff']>=0, 'color'] = 'green'
 hist2.loc[hist2['diff']<0, 'color'] = 'red'
 
-
-
 fig3 = make_subplots()                                  #specs=[[{"secondary_y": True}]])
 
-## Create Candlestick chart
+# Create Candlestick chart
 fig3.add_trace(go.Candlestick(x=hist2[4],
                               open=hist2[0],
                               high=hist2[1],
@@ -427,10 +477,10 @@ fig3.add_trace(go.Candlestick(x=hist2[4],
                               name='Price'))
 
 # Add 100-day moving average
-#fig3.add_trace(go.Scatter(x=hist2[4],y=hist2[3].rolling(window=100).mean(),marker_color='blue',name='100 Day MA'))
+# fig3.add_trace(go.Scatter(x=hist2[4],y=hist2[3].rolling(window=100).mean(),marker_color='blue',name='100 Day MA'))
 
-
-fig3.add_trace(go.Scatter(x=hist2[4],y=hist2[12],mode='lines+markers',name='FWA Level-1',
+# Add Level-1 FWA line chart
+fig3.add_trace(go.Scatter(x=hist2[4],y=hist2[9],mode='lines+markers',name='FWA Level-1',
                           marker=dict(
                               color='yellow',
                               size=7,
@@ -442,11 +492,9 @@ fig3.add_trace(go.Scatter(x=hist2[4],y=hist2[12],mode='lines+markers',name='FWA 
                           ))
 
 
-
-
 # Add Level-2 FWA line chart
-fig3.add_trace(go.Scatter(x=hist2[4],y=hist2[16],mode='lines+markers',name='FWA Level-2',
-                          marker=dict(
+fig3.add_trace(go.Scatter(x=hist2[4],y=hist2[10],mode='lines+markers',name='FWA Level-2',
+                         marker=dict(
                               color='LightSkyBlue',
                               size=10,
                               line=dict(
@@ -464,7 +512,7 @@ fig3.add_trace(go.Scatter(x=hist2[4],y=hist2[16],mode='lines+markers',name='FWA 
 
 #fig3.update_layout(xaxis_rangeslider_visible=False)  #hide range slider
 fig3.update_layout(title={'text':'DJI', 'x':0.5})
-fig3.update_layout(xaxis_range=['2019-01-01','2023-08-29'])
+fig3.update_layout(xaxis_range=['2020-01-01','2023-09-26'])
 
 
 
@@ -475,21 +523,7 @@ fig3.update_xaxes(rangebreaks = [
                        dict(values=["2021-12-25","2022-01-01"])
                                 ])
 
-#fig3.update_xaxes(
-#    rangeslider_visible=True,
-#    rangeselector=dict(
-#        buttons=list([
-#            dict(count=1, label="1m", step="month", stepmode="backward"),
-#            dict(count=6, label="6m", step="month", stepmode="backward"),
-#            dict(count=1, label="YTD", step="year", stepmode="todate"),
-#            dict(count=1, label="1y", step="year", stepmode="backward"),
-#            dict(step="all")
-#        ])
-#    )
-#)
-
-
-
 
 fig3.show()
+
 
